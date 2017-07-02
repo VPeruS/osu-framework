@@ -17,5 +17,20 @@ namespace osu.Framework.Input
             Mouse = Mouse?.Clone(),
             Last = Last
         };
+
+        // >>><<<
+        public bool ByName(string name) {
+            if (name == "MOUSE")
+            {
+                if (Mouse != null)
+                    return true;
+            }
+            else if (name == "KEYBOARD")
+            {
+                if (Keyboard != null)
+                    return true;
+            }
+                return false;
+        }
     }
 }

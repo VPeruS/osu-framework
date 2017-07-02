@@ -206,6 +206,7 @@
     <Compile Include="Graphics\Transforms\TransformAlpha.cs" />
     <Compile Include="Graphics\Transforms\TransformColour.cs" />
     <Compile Include="Graphics\Transforms\TransformFloat.cs" />
+    <Compile Include="Input\IDeviceModule.cs" />
     <Compile Include="Graphics\Transforms\TransformPosition.cs" />
     <Compile Include="Graphics\Transforms\TransformPositionX.cs" />
     <Compile Include="Graphics\Transforms\TransformPositionY.cs" />
@@ -221,6 +222,8 @@
     <Compile Include="Graphics\Visualisation\VisualisedDrawable.cs" />
     <Compile Include="Input\IKeyboardState.cs" />
     <Compile Include="Input\IMouseState.cs" />
+    <Compile Include="Input\DeviceModules\Keyboard.cs" />
+    <Compile Include="Input\DeviceModules\Mouse.cs" />
     <Compile Include="Input\ITextInputSource.cs" />
     <Compile Include="IO\File\FileSafety.cs" />
     <Compile Include="IO\Network\FileWebRequest.cs" />

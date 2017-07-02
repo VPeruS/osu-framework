@@ -11,9 +11,17 @@ namespace osu.Framework.Input
     /// </summary>
     public class CustomInputManager : InputManager
     {
+        public CustomInputManager()
+        {
+            inputDevices.Add(new osu.Framework.Input.DeviceModules.Mouse(this));
+            inputDevices.Add(new osu.Framework.Input.DeviceModules.Keyboard(this));
+        }
+
         protected override IEnumerable<InputHandler> InputHandlers => inputHandlers;
+        protected override IEnumerable<IDeviceModule> InputDevices => inputDevices;
 
         private readonly List<InputHandler> inputHandlers = new List<InputHandler>();
+        private readonly List<IDeviceModule> inputDevices = new List<IDeviceModule>();
 
         protected void AddHandler(InputHandler handler)
         {

@@ -17,31 +17,6 @@ namespace osu.Framework.Input
     public abstract class InputManager : Container, IRequireHighFrequencyMousePosition
     {
         /// <summary>
-        /// The initial delay before key repeat begins.
-        /// </summary>
-        private const int repeat_initial_delay = 250;
-
-        /// <summary>
-        /// The delay between key repeats after the initial repeat.
-        /// </summary>
-        private const int repeat_tick_rate = 70;
-
-        /// <summary>
-        /// The maximum time between two clicks for a double-click to be considered.
-        /// </summary>
-        private const int double_click_time = 250;
-
-        /// <summary>
-        /// The distance that must be moved before a drag begins.
-        /// </summary>
-        private const float drag_start_distance = 0;
-
-        /// <summary>
-        /// The distance that must be moved until a dragged click becomes invalid.
-        /// </summary>
-        private const float click_drag_distance = 40;
-
-        /// <summary>
         /// The time of the last input action.
         /// </summary>
         public double LastActionTime;
@@ -50,15 +25,8 @@ namespace osu.Framework.Input
 
         internal Drawable FocusedDrawable;
 
+        protected abstract IEnumerable<IDeviceModule> InputDevices { get; }
         protected abstract IEnumerable<InputHandler> InputHandlers { get; }
-
-        private double lastClickTime;
-
-        private double keyboardRepeatTime;
-
-        private bool isDragging;
-
-        private bool isValidClick;
 
         /// <summary>
         /// The last processed state.
@@ -66,25 +34,12 @@ namespace osu.Framework.Input
         public InputState CurrentState = new InputState();
 
         /// <summary>
-        /// The sequential list in which to handle mouse input.
-        /// </summary>
-        private readonly List<Drawable> mouseInputQueue = new List<Drawable>();
-
-        /// <summary>
-        /// The sequential list in which to handle keyboard input.
-        /// </summary>
-        private readonly List<Drawable> keyboardInputQueue = new List<Drawable>();
-
-        private Drawable draggingDrawable;
-        private readonly List<Drawable> hoveredDrawables = new List<Drawable>();
-        private Drawable hoverHandledDrawable;
-
-        /// <summary>
         /// Contains all hovered <see cref="Drawable"/>s in top-down order.
         /// Top-down in this case means reverse draw order, i.e. the front-most visible
         /// <see cref="Drawable"/> first, and <see cref="Container"/>s after their children.
         /// </summary>
         public IEnumerable<Drawable> HoveredDrawables => hoveredDrawables;
+        private readonly List<Drawable> hoveredDrawables = new List<Drawable>();
 
         protected InputManager()
         {
@@ -125,7 +80,7 @@ namespace osu.Framework.Input
         /// <param name="potentialFocusTarget">The drawable to become focused.</param>
         /// <param name="state">The <see cref="InputState"/> associated with the focusing event.</param>
         /// <returns>True if the given drawable is now focused (or focus is dropped in the case of a null target).</returns>
-        protected bool ChangeFocus(Drawable potentialFocusTarget, InputState state)
+        internal bool ChangeFocus(Drawable potentialFocusTarget, InputState state)
         {
             if (potentialFocusTarget == FocusedDrawable)
                 return true;
@@ -170,11 +125,8 @@ namespace osu.Framework.Input
             if (pendingStates.Length == 0)
                 pendingStates = new[] { new InputState() };
 
-            foreach (InputState s in pendingStates)
+            foreach (var s in pendingStates)
             {
-                bool hasNewKeyboard = s.Keyboard != null;
-                bool hasNewMouse = s.Mouse != null;
-
                 var last = CurrentState;
 
                 //avoid lingering references that would stay forever.
@@ -183,47 +135,19 @@ namespace osu.Framework.Input
                 CurrentState = s;
                 CurrentState.Last = last;
 
-                if (CurrentState.Keyboard == null) CurrentState.Keyboard = last.Keyboard ?? new KeyboardState();
-                if (CurrentState.Mouse == null) CurrentState.Mouse = last.Mouse ?? new MouseState();
-
                 TransformState(CurrentState);
+                updateInputQueues();//CurrentState);
 
-                //move above?
-                updateInputQueues(CurrentState);
-
-                // we only want to set a last state if both the new and old state are of the same type.
-                // this avoids giving the new state a false impression of being able to calculate delta values based on a last
-                // state potentially from a different input source.
-                if (last.Mouse != null && s.Mouse != null)
+                foreach (var device in InputDevices)
                 {
-                    if (last.Mouse.GetType() == s.Mouse.GetType())
+                    if (device.isPresent)
                     {
-                        last.Mouse.LastState = null;
-                        s.Mouse.LastState = last.Mouse;
+                        var time = device.UpdateEvents(CurrentState, last, FocusedDrawable, Clock);
+                        //if (time > 0)
+                        //    LastActionTime = time;
                     }
-
-                    if (last.Mouse.HasAnyButtonPressed)
-                        s.Mouse.PositionMouseDown = last.Mouse.PositionMouseDown;
                 }
-
-                //hover could change even when the mouse state has not.
-                updateHoverEvents(CurrentState);
-
-                if (hasNewMouse)
-                    updateMouseEvents(CurrentState);
-
-                if (hasNewKeyboard || CurrentState.Keyboard.Keys.Any())
-                    updateKeyboardEvents(CurrentState);
             }
-
-            if (CurrentState.Mouse != null)
-            {
-                foreach (var d in mouseInputQueue)
-                    if (d is IRequireHighFrequencyMousePosition)
-                        if (d.TriggerOnMouseMove(CurrentState)) break;
-            }
-
-            keyboardRepeatTime -= Time.Elapsed;
 
             if (FocusedDrawable == null)
                 focusTopMostRequestingDrawable();
@@ -241,68 +165,16 @@ namespace osu.Framework.Input
         private IEnumerable<InputState> createDistinctInputStates(List<InputState> states)
         {
             InputState last = CurrentState;
-
+ 
             foreach (var i in states)
             {
-                //first we want to create a copy of ourselves without any button changes
-                //we do this by updating our buttons to the state of the last frame.
-                var iWithoutButtons = i.Clone();
+                yield return i;
 
-                var iHasMouse = iWithoutButtons.Mouse != null;
-                var iHasKeyboard = iWithoutButtons.Keyboard != null;
-
-                if (iHasMouse)
-                    for (MouseButton b = 0; b < MouseButton.LastButton; b++)
-                        iWithoutButtons.Mouse.SetPressed(b, last.Mouse?.IsPressed(b) ?? false);
-
-                if (iHasKeyboard)
-                    iWithoutButtons.Keyboard.Keys = last.Keyboard?.Keys ?? new Key[] { };
-
-                //we start by adding this state to the processed list...
-                yield return iWithoutButtons;
-                last = iWithoutButtons;
-
-                //and then iterate over each button/key change, adding intermediate states along the way.
-                if (iHasMouse)
+                foreach (var d in InputDevices)
                 {
-                    for (MouseButton b = 0; b < MouseButton.LastButton; b++)
-                    {
-                        if (i.Mouse.IsPressed(b) != (last.Mouse?.IsPressed(b) ?? false))
-                        {
-                            var intermediateState = last.Clone();
-                            if (intermediateState.Mouse == null) intermediateState.Mouse = new MouseState();
-
-                            //add our single local change
-                            intermediateState.Mouse.SetPressed(b, i.Mouse.IsPressed(b));
-
-                            last = intermediateState;
-                            yield return intermediateState;
-                        }
-                    }
-                }
-
-                if (iHasKeyboard)
-                {
-                    foreach (var releasedKey in last.Keyboard?.Keys.Except(i.Keyboard.Keys) ?? new Key[] { })
-                    {
-                        var intermediateState = last.Clone();
-                        if (intermediateState.Keyboard == null) intermediateState.Keyboard = new KeyboardState();
-
-                        intermediateState.Keyboard.Keys = intermediateState.Keyboard.Keys.Where(d => d != releasedKey);
-
-                        last = intermediateState;
-                        yield return intermediateState;
-                    }
-
-                    foreach (var pressedKey in i.Keyboard.Keys.Except(last.Keyboard?.Keys ?? new Key[] { }))
-                    {
-                        var intermediateState = last.Clone();
-                        if (intermediateState.Keyboard == null) intermediateState.Keyboard = new KeyboardState();
-
-                        intermediateState.Keyboard.Keys = intermediateState.Keyboard.Keys.Union(new[] { pressedKey });
-
-                        last = intermediateState;
-                        yield return intermediateState;
+                    if (i.ByName(d.Name)){
+                        foreach (var v in d.CreateDistinctInputState(i, last))
+                            yield return v;
                     }
                 }
             }
@@ -327,345 +199,31 @@ namespace osu.Framework.Input
         {
         }
 
-        private void updateInputQueues(InputState state)
+        private void updateInputQueues()//InputState state)
         {
-            keyboardInputQueue.Clear();
-            mouseInputQueue.Clear();
-
-            if (state.Keyboard != null)
-                foreach (Drawable d in AliveInternalChildren)
-                    d.BuildKeyboardInputQueue(keyboardInputQueue);
-
-            if (state.Mouse != null)
-                foreach (Drawable d in AliveInternalChildren)
-                    d.BuildMouseInputQueue(state.Mouse.Position, mouseInputQueue);
-
-            // Keyboard and mouse queues were created in back-to-front order.
-            // We want input to first reach front-most drawables, so the queues
-            // need to be reversed.
-            keyboardInputQueue.Reverse();
-            mouseInputQueue.Reverse();
-        }
-
-        private void updateHoverEvents(InputState state)
-        {
-            Drawable lastHoverHandledDrawable = hoverHandledDrawable;
-            hoverHandledDrawable = null;
-
-            List<Drawable> lastHoveredDrawables = new List<Drawable>(hoveredDrawables);
-            hoveredDrawables.Clear();
-
-            // First, we need to construct hoveredDrawables for the current frame
-            foreach (Drawable d in mouseInputQueue)
+            foreach (var device in InputDevices)
             {
-                hoveredDrawables.Add(d);
-
-                // Don't need to re-hover those that are already hovered
-                if (d.Hovering)
+                if (true)//state.ByName(device.Name))
                 {
-                    // Check if this drawable previously handled hover, and assume it would once more
-                    if (d == lastHoverHandledDrawable)
-                    {
-                        hoverHandledDrawable = lastHoverHandledDrawable;
-                        break;
-                    }
+                    List<Drawable> n = new List<Drawable>();
 
-                    continue;
+                    device.ClearQueue();
+
+                    foreach (Drawable d in AliveInternalChildren)
+                        d.BuildInputQueue(device.Name, n);
+                    Console.WriteLine("Child {0}", n.Count);
+
+                    n.Reverse();
+                    device.SetUpQueue(n);
                 }
-
-                d.Hovering = true;
-                if (d.TriggerOnHover(state))
-                {
-                    hoverHandledDrawable = d;
-                    break;
-                }
-            }
-
-            // Unhover all previously hovered drawables which are no longer hovered.
-            foreach (Drawable d in lastHoveredDrawables.Except(hoveredDrawables))
-            {
-                d.Hovering = false;
-                d.TriggerOnHoverLost(state);
-            }
-        }
-
-        private void updateKeyboardEvents(InputState state)
-        {
-            KeyboardState keyboard = (KeyboardState)state.Keyboard;
-
-            if (!keyboard.Keys.Any())
-                keyboardRepeatTime = 0;
-
-            var last = state.Last?.Keyboard;
-
-            if (last == null) return;
-
-            foreach (var k in last.Keys)
-            {
-                if (!keyboard.Keys.Contains(k))
-                    handleKeyUp(state, k);
-            }
-
-            foreach (Key k in keyboard.Keys.Distinct())
-            {
-                bool isModifier = k == Key.LControl || k == Key.RControl
-                                  || k == Key.LAlt || k == Key.RAlt
-                                  || k == Key.LShift || k == Key.RShift
-                                  || k == Key.LWin || k == Key.RWin;
-
-                LastActionTime = Time.Current;
-
-                bool isRepetition = last.Keys.Contains(k);
-
-                if (isModifier)
-                {
-                    //modifiers shouldn't affect or report key repeat
-                    if (!isRepetition)
-                        handleKeyDown(state, k, false);
-                    continue;
-                }
-
-                if (isRepetition)
-                {
-                    if (keyboardRepeatTime <= 0)
-                    {
-                        keyboardRepeatTime += repeat_tick_rate;
-                        handleKeyDown(state, k, true);
-                    }
-                }
-                else
-                {
-                    keyboardRepeatTime = repeat_initial_delay;
-                    handleKeyDown(state, k, false);
-                }
-            }
-        }
-
-        private List<Drawable> mouseDownInputQueue;
-
-        private void updateMouseEvents(InputState state)
-        {
-            MouseState mouse = (MouseState)state.Mouse;
-
-            var last = state.Last?.Mouse as MouseState;
-
-            if (last == null) return;
-
-            if (mouse.Position != last.Position)
-            {
-                handleMouseMove(state);
-                if (isDragging)
-                    handleMouseDrag(state);
-            }
-
-            for (MouseButton b = 0; b < MouseButton.LastButton; b++)
-            {
-                var lastPressed = last.IsPressed(b);
-
-                if (lastPressed != mouse.IsPressed(b))
-                {
-                    if (lastPressed)
-                        handleMouseUp(state, b);
-                    else
-                        handleMouseDown(state, b);
-                }
-            }
-
-            if (mouse.WheelDelta != 0)
-                handleWheel(state);
-
-            if (mouse.HasAnyButtonPressed)
-            {
-                if (!last.HasAnyButtonPressed)
-                {
-                    //stuff which only happens once after the mousedown state
-                    mouse.PositionMouseDown = state.Mouse.Position;
-                    LastActionTime = Time.Current;
-
-                    if (mouse.IsPressed(MouseButton.Left))
-                    {
-                        isValidClick = true;
-
-                        if (Time.Current - lastClickTime < double_click_time)
-                        {
-                            if (handleMouseDoubleClick(state))
-                                //when we handle a double-click we want to block a normal click from firing.
-                                isValidClick = false;
-
-                            lastClickTime = 0;
-                        }
-
-                        lastClickTime = Time.Current;
-                    }
-                }
-
-                if (!isDragging && Vector2.Distance(mouse.PositionMouseDown ?? mouse.Position, mouse.Position) > drag_start_distance)
-                {
-                    isDragging = true;
-                    handleMouseDragStart(state);
-                }
-            }
-            else if (last.HasAnyButtonPressed)
-            {
-                if (isValidClick && (draggingDrawable == null || Vector2.Distance(mouse.PositionMouseDown ?? mouse.Position, mouse.Position) < click_drag_distance))
-                    handleMouseClick(state);
-
-                mouseDownInputQueue = null;
-                mouse.PositionMouseDown = null;
-                isValidClick = false;
-
-                if (isDragging)
-                {
-                    isDragging = false;
-                    handleMouseDragEnd(state);
-                }
-            }
-        }
-
-        private bool handleMouseDown(InputState state, MouseButton button)
-        {
-            MouseDownEventArgs args = new MouseDownEventArgs
-            {
-                Button = button
-            };
-
-            mouseDownInputQueue = new List<Drawable>(mouseInputQueue);
-
-            return mouseInputQueue.Find(target => target.TriggerOnMouseDown(state, args)) != null;
-        }
-
-        private bool handleMouseUp(InputState state, MouseButton button)
-        {
-            if (mouseDownInputQueue == null) return false;
-
-            MouseUpEventArgs args = new MouseUpEventArgs
-            {
-                Button = button
-            };
-
-            //extra check for IsAlive because we are using an outdated queue.
-            return mouseDownInputQueue.Any(target => target.IsAlive && target.IsPresent && target.TriggerOnMouseUp(state, args));
-        }
-
-        private bool handleMouseMove(InputState state)
-        {
-            return mouseInputQueue.Any(target => target.TriggerOnMouseMove(state));
-        }
-
-        private bool handleMouseClick(InputState state)
-        {
-            var intersectingQueue = mouseInputQueue.Intersect(mouseDownInputQueue);
-
-            Drawable focusTarget = null;
-
-            // click pass, triggering an OnClick on all drawables up to the first which returns true.
-            // an extra IsHovered check is performed because we are using an outdated queue (for valid reasons which we need to document).
-            var clickedDrawable = intersectingQueue.FirstOrDefault(t => t.IsHovered(state.Mouse.Position) && t.TriggerOnClick(state));
-
-            if (clickedDrawable != null)
-            {
-                focusTarget = clickedDrawable;
-
-                if (!focusTarget.AcceptsFocus)
-                {
-                    // search upwards from the clicked drawable until we find something to handle focus.
-                    Drawable previousFocused = FocusedDrawable;
-
-                    while (focusTarget?.AcceptsFocus == false)
-                        focusTarget = focusTarget.Parent as Drawable;
-
-                    if (focusTarget != null && previousFocused != null)
-                    {
-                        // we found a focusable target above us.
-                        // now search upwards from previousFocused to check whether focusTarget is a common parent.
-                        Drawable search = previousFocused;
-                        while (search != null && search != focusTarget)
-                            search = search.Parent as Drawable;
-
-                        if (focusTarget == search)
-                            // we have a common parent, so let's keep focus on the previously focused target.
-                            focusTarget = previousFocused;
-                    }
-                }
-            }
-
-            ChangeFocus(focusTarget, state);
-            return clickedDrawable != null;
-        }
-
-        private bool handleMouseDoubleClick(InputState state)
-        {
-            return mouseInputQueue.Any(target => target.TriggerOnDoubleClick(state));
-        }
-
-        private bool handleMouseDrag(InputState state)
-        {
-            //Once a drawable is dragged, it remains in a dragged state until the drag is finished.
-            return draggingDrawable?.TriggerOnDrag(state) ?? false;
-        }
-
-        private bool handleMouseDragStart(InputState state)
-        {
-            draggingDrawable = mouseDownInputQueue?.FirstOrDefault(target => target.IsAlive && target.TriggerOnDragStart(state));
-            return draggingDrawable != null;
-        }
-
-        private bool handleMouseDragEnd(InputState state)
-        {
-            if (draggingDrawable == null)
-                return false;
-
-            bool result = draggingDrawable.TriggerOnDragEnd(state);
-            draggingDrawable = null;
-
-            return result;
-        }
-
-        private bool handleWheel(InputState state)
-        {
-            return mouseInputQueue.Any(target => target.TriggerOnWheel(state));
-        }
-
-        private bool handleKeyDown(InputState state, Key key, bool repeat)
-        {
-            KeyDownEventArgs args = new KeyDownEventArgs
-            {
-                Key = key,
-                Repeat = repeat
-            };
-
-            if (!unfocusIfNoLongerValid())
-            {
-                if (args.Key == Key.Escape)
-                {
-                    ChangeFocus(null);
-                    return true;
-                }
-                if (FocusedDrawable.TriggerOnKeyDown(state, args))
-                    return true;
-            }
-
-            return keyboardInputQueue.Any(target => target.TriggerOnKeyDown(state, args));
-        }
-
-        private bool handleKeyUp(InputState state, Key key)
-        {
-            KeyUpEventArgs args = new KeyUpEventArgs
-            {
-                Key = key
-            };
-
-            if (!unfocusIfNoLongerValid() && (FocusedDrawable?.TriggerOnKeyUp(state, args) ?? false))
-                return true;
-
-            return keyboardInputQueue.Any(target => target.TriggerOnKeyUp(state, args));
+            }   
         }
 
         /// <summary>
         /// Unfocus the current focused drawable if it is no longer in a valid state.
         /// </summary>
         /// <returns>true if there is no longer a focus.</returns>
-        private bool unfocusIfNoLongerValid()
+        internal bool unfocusIfNoLongerValid()
         {
             if (FocusedDrawable == null) return true;
 
@@ -693,7 +251,19 @@ namespace osu.Framework.Input
             return true;
         }
 
-        private void focusTopMostRequestingDrawable() => ChangeFocus(keyboardInputQueue.FirstOrDefault(target => target.RequestsFocus));
+        private void focusTopMostRequestingDrawable()
+        {
+            Drawable nextFocused = new FillFlowContainer();
+            foreach (var d in InputDevices)
+            {
+                if (d.FocusTarget() == null)
+                {
+                    nextFocused = d.FocusTarget();
+                    break;
+                }
+            }
+            ChangeFocus(nextFocused);
+        }
     }
 
     public enum ConfineMouseMode

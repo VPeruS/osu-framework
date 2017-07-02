@@ -725,6 +725,18 @@ namespace osu.Framework.Graphics.Containers
             return DrawRectangle.Shrink(cRadius).DistanceSquared(ToLocalSpace(screenSpacePos)) <= cRadius * cRadius;
         }
 
+        internal override bool BuildInputQueue(string devName, List<Drawable> queue)
+        {
+            if (!base.BuildInputQueue(devName, queue))
+                return false;
+
+            //don't use AliveInternalChildren here as it will cause too many allocations (IEnumerable).
+            foreach (Drawable d in internalChildren.AliveItems)
+                d.BuildInputQueue(devName, queue);
+
+            return true;
+        }
+
         internal override bool BuildKeyboardInputQueue(List<Drawable> queue)
         {
             if (!base.BuildKeyboardInputQueue(queue))

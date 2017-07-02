@@ -1826,6 +1826,12 @@ namespace osu.Framework.Graphics
             };
         }
 
+        internal virtual bool BuildInputQueue(string name, List<Drawable> queue)
+        {
+            queue.Add(this);
+            return true;
+        }
+
         /// <summary>
         /// This method is responsible for building a queue of Drawables to receive keyboard input
         /// in reverse order. This method is overridden by <see cref="T:Container"/> to be called on all
