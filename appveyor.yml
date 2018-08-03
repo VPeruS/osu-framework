@@ -20,7 +20,7 @@ build:
   verbosity: minimal
 after_build:
   - cmd: inspectcode /o="inspectcodereport.xml" /caches-home="inspectcode" osu-framework.sln
-  - cmd: NVika parsereport "inspectcodereport.xml" --treatwarningsaserrors
+  - cmd: NVika parsereport "inspectcodereport.xml"
   - cmd: dotnet pack osu.Framework --include-symbols /p:Version=0.0.%APPVEYOR_BUILD_VERSION%
 artifacts:
   - path: osu.Framework.Tests/bin/Debug/netcoreapp2.1/test.out
