@@ -78,7 +78,7 @@ namespace osu.Framework.Audio.Track
                 var len = Bass.ChannelBytes2Seconds(activeStream, Bass.ChannelGetLength(activeStream)) * 1000;
                 using (StreamWriter sw = File.AppendText("test.out"))
                 {
-                    sw.WriteLine(len.ToString());
+                    sw.WriteLine(len.ToString(new CultureInfo("en")));
                 }
                 Length = len;
 
