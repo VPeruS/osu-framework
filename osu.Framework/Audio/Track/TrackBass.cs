@@ -76,10 +76,10 @@ namespace osu.Framework.Audio.Track
                 }
 
                 var len = Bass.ChannelBytes2Seconds(activeStream, Bass.ChannelGetLength(activeStream)) * 1000;
-                using (StreamWriter sw = File.AppendText("test.out")) 
+                using (StreamWriter sw = File.AppendText("test.out"))
                 {
                     sw.WriteLine(len.ToString());
-                }	
+                }
                 Length = len;
 
                 Bass.ChannelGetAttribute(activeStream, ChannelAttribute.Frequency, out float frequency);
