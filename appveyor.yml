@@ -27,7 +27,3 @@ artifacts:
   - path: osu.Framework/bin/Debug/*.nupkg
   - path: inspectcodereport.xml
   
-  on_failure:
-  - appveyor PushArtifact inspectcodereport.xml
-
-  
