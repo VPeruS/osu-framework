@@ -26,5 +26,8 @@ artifacts:
   - path: osu.Framework.Tests/bin/Debug/netcoreapp2.1/test.out
   - path: osu.Framework/bin/Debug/*.nupkg
   - path: inspectcodereport.xml
+  
+  on_failure:
+  - appveyor PushArtifact inspectcodereport.xml
 
   
