@@ -18,6 +18,11 @@ build:
   project: osu-framework.sln
   parallel: true
   verbosity: minimal
+test:
+  cmd: dotnet test "C:\projects\osu-framework\osu.Framework.Tests\osu.Framework.Tests.csproj" \
+       --configuration Debug --no-build --test-adapter-path:. --logger:Appveyor \
+       --filter ClassName!=osu.Framework.Tests.Visual.TestCaseWaveform
+
 artifacts:
   - path: osu.Framework/bin/Debug/*.nupkg
   - path: inspectcodereport.xml
