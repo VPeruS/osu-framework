@@ -57,31 +57,39 @@ namespace osu.Framework.Audio.Track
                 BassFlags flags = Preview ? 0 : BassFlags.Decode | BassFlags.Prescan | BassFlags.Float;
                 activeStream = Bass.CreateStream(StreamSystem.NoBuffer, flags, procs.BassProcedures, IntPtr.Zero);
 
-                if (!Preview)
-                {
-                    // We assign the BassFlags.Decode streams to the device "bass_nodevice" to prevent them from getting
-                    // cleaned up during a Bass.Free call. This is necessary for seamless switching between audio devices.
-                    // Further, we provide the flag BassFlags.FxFreeSource such that freeing the activeStream also frees
-                    // all parent decoding streams.
-                    const int bass_nodevice = 0x20000;
-
-                    Bass.ChannelSetDevice(activeStream, bass_nodevice);
-                    tempoAdjustStream = BassFx.TempoCreate(activeStream, BassFlags.Decode | BassFlags.FxFreeSource);
-                    Bass.ChannelSetDevice(activeStream, bass_nodevice);
-                    activeStream = BassFx.ReverseCreate(tempoAdjustStream, 5f, BassFlags.Default | BassFlags.FxFreeSource);
-
-                    Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoUseQuickAlgorithm, 1);
-                    Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoOverlapMilliseconds, 4);
-                    Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoSequenceMilliseconds, 30);
-                }
-
-                var len = Bass.ChannelBytes2Seconds(activeStream, Bass.ChannelGetLength(activeStream)) * 1000;
                 using (StreamWriter sw = File.AppendText("test.out"))
                 {
+
+                    if (!Preview)
+                    {
+                        // We assign the BassFlags.Decode streams to the device "bass_nodevice" to prevent them from getting
+                        // cleaned up during a Bass.Free call. This is necessary for seamless switching between audio devices.
+                        // Further, we provide the flag BassFlags.FxFreeSource such that freeing the activeStream also frees
+                        // all parent decoding streams.
+                        const int bass_nodevice = 0x20000;
+
+                        Bass.ChannelSetDevice(activeStream, bass_nodevice);
+                        tempoAdjustStream = BassFx.TempoCreate(activeStream, BassFlags.Decode | BassFlags.FxFreeSource);
+                        sw.WriteLine(ManagedBass.Bass.LastError);
+                        Bass.ChannelSetDevice(activeStream, bass_nodevice);
+                        activeStream = BassFx.ReverseCreate(tempoAdjustStream, 5f, BassFlags.Default | BassFlags.FxFreeSource);
+                        sw.WriteLine(ManagedBass.Bass.LastError);
+
+                        Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoUseQuickAlgorithm, 1);
+                        sw.WriteLine(ManagedBass.Bass.LastError);
+                        Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoOverlapMilliseconds, 4);
+                        sw.WriteLine(ManagedBass.Bass.LastError);
+                        Bass.ChannelSetAttribute(activeStream, ChannelAttribute.TempoSequenceMilliseconds, 30);
+                        sw.WriteLine(ManagedBass.Bass.LastError);
+                    }
+
+                    var len = Bass.ChannelBytes2Seconds(activeStream, Bass.ChannelGetLength(activeStream)) * 1000;
+
                     sw.WriteLine(len.ToString());
                     sw.WriteLine(ManagedBass.Bass.LastError);
+
+                    Length = len;
                 }
-                Length = len;
 
                 Bass.ChannelGetAttribute(activeStream, ChannelAttribute.Frequency, out float frequency);
                 initialFrequency = frequency;

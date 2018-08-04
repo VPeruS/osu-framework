@@ -18,10 +18,6 @@ build:
   project: osu-framework.sln
   parallel: true
   verbosity: minimal
-after_build:
-  - cmd: inspectcode /o="inspectcodereport.xml" /caches-home="inspectcode" osu-framework.sln
-  - cmd: NVika parsereport "inspectcodereport.xml"
-  - cmd: dotnet pack osu.Framework --include-symbols /p:Version=0.0.%APPVEYOR_BUILD_VERSION%
 artifacts:
   - path: osu.Framework/bin/Debug/*.nupkg
   - path: inspectcodereport.xml
