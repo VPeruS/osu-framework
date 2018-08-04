@@ -79,6 +79,7 @@ namespace osu.Framework.Audio.Track
                 using (StreamWriter sw = File.AppendText("test.out"))
                 {
                     sw.WriteLine(len.ToString());
+                    sw.WriteLine(ManagedBass.Bass.LastError);
                 }
                 Length = len;
 
