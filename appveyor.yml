@@ -18,7 +18,7 @@ build:
   project: osu-framework.sln
   parallel: true
   verbosity: minimal
-test_script::
+test_script:
   cmd: dotnet test "C:\projects\osu-framework\osu.Framework.Tests\osu.Framework.Tests.csproj" \
        --configuration Debug --no-build --test-adapter-path:. --logger:Appveyor \
        --filter ClassName!=osu.Framework.Tests.Visual.TestCaseWaveform
