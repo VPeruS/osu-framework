@@ -27,3 +27,5 @@ artifacts:
   - path: inspectcodereport.xml
 on_failure:
   - cmd: appveyor PushArtifact osu.Framework.Tests/bin/Debug/netcoreapp2.1/test.out
+on_failure:
+  - cmd: appveyor PushArtifact osu.Framework.Tests/Resources/Tracks/sample-track.mp3
